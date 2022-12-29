@@ -1,0 +1,707 @@
+---
+title: "A1 - Estadística Avanzada"
+author: "Leroy Deniz"
+date: "2022-10-14"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Importación de librerías
+
+```{r message=FALSE}
+library(psych)
+library(dplyr)
+library(ggplot2)
+library(VIM)
+```
+
+<br><br>
+___
+
+## 1 Carga del archivo ##
+
+Se carga el contenido del fichero _gpa_row.csv_ utilizando la función _read.csv_ y se muestran sus primeros registros junto con los nombres de las columnas y sus tipos.
+
+```{r }
+df <- read.csv("gpa_row.csv", sep=",", dec='.')
+print(head(df))
+```
+
+```{r}
+cat("La cantidad de registros del dataset es de", nrow(df), " con", length(df), "columnas")
+```
+
+Se muestran más explícitamente los tipos de datos con los que R ha identificado cada columna, habiendo presencia de tipos enteros, numéricos (floats), lógicos y caracteres.
+(Para mejorar su visualización, se convierte en una matriz y se traspone)
+
+```{r }
+t(t(sapply(df,class)))
+```
+
+Las columnas de tipo numérico son _sat_, _tothrs_, _hsize_, _hsrank_, _hsperc_ y _colgpa_, sin embargo R no ha identificado como numéricas _tothrs_ y _hsize_, por lo que corresponderá aplicar la transformación más adelante.
+
+<br><br>
+
+___
+
+## 2 Normalización de variables cualitativas
+
+### 2.1 Variable _athlete_
+
+_"athlete: indicador de si el estudiante practica algún deporte en la universidad"_
+
+Siguiendo el criterio propuesto en el enunciado de la tarea, será convertidas a tipo _factor_, con los valores _TRUE_ o _FALSE_ sin espacios. Primero se verifica qué valores están presentes en esa columna.
+
+```{r }
+unique(df$athlete)
+```
+
+Como puede verse anteriormente, tanto _false_ como _true_ están en mayúsculas y minúsculas, por lo que se procede a su homogeneización en mayúsculas.
+
+```{r }
+df$athlete = sapply(df$athlete, toupper)
+unique(df$athlete)
+```
+
+Se eliminan los espacios en blanco utilizando la función _trim_.
+
+```{r }
+df$athlete <- sapply(df$athlete, trimws, which=c("both"))
+```
+
+A continuación se convierte la columna a tipo _factor_.
+
+```{r }
+df$athlete <- factor(df$athlete)
+```
+
+### 2.2 Variable _female_
+
+_"female: indicador de si el estudiante es mujer"_
+
+Se identifican los valores presentes en la columna, que como se puede ver, son correctos. 
+
+```{r }
+unique(df$female)
+```
+
+Se eliminan los espacios en blanco, si los hubiera, en ambos extremos de cada valor y se convierte la columna a factor.
+
+```{r }
+df$female <- sapply(df$female, trimws, which=c("both"))
+df$female <- factor(df$female)
+```
+
+### 2.3 Variable _black_
+
+_"black: indicador de si el estudiante es de raza negra o no"_
+
+Se identifican los valores presentes en la columna, que muestra a simple vista la existencia de mayúsculas, minúsculas, y espacios en blanco.
+
+```{r }
+unique(df$black)
+```
+
+Se unifican los valores a mayúsculas, se eliminan los espacios en blanco, si los hubiera, en ambos extremos de cada valor y se convierte la columna a _factor_.
+Al final se muestra los distintos valores que toma la variable en la columna.
+
+```{r }
+df$black = sapply(df$black, toupper)
+df$black <- sapply(df$black, trimws, which=c("both"))
+df$black <- factor(df$black)
+unique(df$black)
+```
+
+
+### 2.4 Variable _white_
+
+_"white: indicador de si el estudiante es de raza blanca o no"_
+
+Se identifican los valores presentes en la columna, que muestra a simple vista la existencia de mayúsculas, minúsculas, y espacios en blanco.
+
+```{r }
+unique(df$white)
+```
+
+Se unifican los valores a mayúsculas, se eliminan los espacios en blanco, si los hubiera, en ambos extremos de cada valor y se convierte la columna a _factor_.
+Al final se muestra los distintos valores que toma la variable en la columna.
+
+```{r }
+df$white = sapply(df$white, toupper)
+df$white <- sapply(df$white, trimws, which=c("both"))
+df$white <- factor(df$white)
+```
+
+El resultado de la normalización de variables cualitativas se puede ver a continuación:
+
+a) **Tipos de Columnas**:
+
+````{r}
+sapply(df[c("athlete", "female", "black", "white")], class)
+```
+
+b) **Contenido de estas cuatro columnas**:
+
+````{r}
+sapply(df[c("athlete", "female", "black", "white")], unique)
+```
+
+<br><br>
+
+___
+
+## 3 Normalización de variables cuantitativas
+
+Antes de proceder a la normalización de las variables, se ha añadido el atributo dec='.' a la función _read.csv_ para tomar por defecto el punto como separador de decimales.
+
+### 3.1 Variable _sat_
+
+_"sat: nota de acceso (medida en escala de 400 a 1600 puntos)"_
+
+Según el criterio de normalización establecido, primero habría que realizar el cambio del separador decimal al punto, sin embargo la columna fue identificada por R como _integer_, lo que nos asegura que son todos números enteros y por lo tanto que no tienen punto decimal, así como tampoco unidad de medida, puesto que en ese caso tendríamos una columna de tipo _character_.
+
+Se verifica a continuación que el rango en el que oscilan los valores de la columna _sat_ está incluido en el intervalo [400,1600].
+
+````{r}
+range(df$sat)
+```
+
+### 3.2 Variable _tothrs_
+
+_"tothrs: horas totales cursadas en el semestre"_
+
+El tipo de esta clase es _character_, por lo que es probable encontrar unidades en los valores o caracteres no numéricos, a lo que habrá que aplicar un cambio que modifique el contenido por el valor numérico asociado.
+
+````{r}
+unique(df$tothrs)
+```
+
+Tal y como se ve anteriormente, hará falta quitar la unidad de horas ('h') al final de cada valor previo a la conversión de la columna.
+
+````{r}
+df$tothrs = substr(df$tothrs,1,nchar(df$tothrs)-1)
+unique(df$tothrs)
+```
+
+Se convierte la columna a tipo numérico, puesto que son todos números enteros también podría ser _integer_.
+
+````{r}
+df$tothrs = as.numeric(df$tothrs)
+```
+
+
+### 3.3 Variable _colgpa_
+
+_"colgpa: nota media del estudiante al final del primer semestre (medida en escala de 0 a 4 puntos)"_
+
+El tipo de _colgpa_ ya es tipo numérico tal como lo auto-identificó R y con la instrucción _dec_, que se definió en la lectura del csv, queda asegurado que el separador de decimales es correcto; por lo que resta proceder a verificar que todos sus elementos están dentro del rango [0-4]. En al siguiente instrucción se contabilizan todos todas las apariciones fuera de este intervalo.
+
+````{r}
+sum(df[which(df$colgpa<0)] | df[which(df$colgpa>4)])
+```
+
+
+### 3.4 Variable _hsize_
+
+_"hsize: numero total de estudiantes en la cohorte de graduados del bachillerato (en cientos)"_
+
+El tipo de _hsize_ es _character_ por lo que se empieza por identificar aquellos valores que hacen que R no pueda definir la columna como numérica. Como aquellos elementos que no sean numéricos serán identificados como NA cuando se aplique la función _as.numeric_, se añade la función _suppressWarnings_ para que el error sea mostrado puesto que es justamente explotar este error lo que se busca.
+
+````{r}
+x_nonum <- which(is.na(suppressWarnings(as.numeric(df$hsize))))
+df$hsize[x_nonum]
+```
+
+Como se puede ver en el bloque anterior, algunos elementos no son considerados numéricos por el separador de decimales, por lo que se cambia la coma por punto en esos casos puntuales.
+
+Referencia del código en este [link](https://rpubs.com/juliosergio/98086).
+
+````{r}
+# Realizamos la sustitución de las comas por puntos en los casos problemáticos
+df$hsize <- sub(",", ".", df$hsize, fixed=TRUE)
+```
+
+Se verifican cuántos de los casos no son numéricos, igual que hicimos en el paso anterior y la respuesta es 0
+
+````{r}
+x_nonum <- which(is.na(suppressWarnings(as.numeric(df$hsize))))
+df$hsize[x_nonum]
+```
+
+Se convierte la columna a tipo numérico y se verifica el nuevo tipo.
+
+````{r}
+df$hsize = as.numeric(df$hsize)
+sapply(df[c("hsize")], class)
+````
+
+
+### 3.5 Variable _hsperc_
+
+_"hsperc: ranking relativo del estudiante (hsrank/hsize)"_
+
+El tipo de _hsperc_ es tipo numérico, por lo que se puede descartar que existan el esta columna valores que no lo sean, como las unidades, además de tener como separador de decimales el punto para que estos seas correctamente tratados.
+
+Resta entonces asegurar que el valor que contiene la columna _hsperc_ se corresponde al ratio entre _hsrank_ y _hsize_.
+
+```{r}
+same_values <- length(which(df$hsperc == df$hsrank/df$hsize))
+diff_values <- length(which(df$hsperc != df$hsrank/df$hsize))
+
+
+cat("Iguales:\t", same_values, "\nDistintos:\t",diff_values)
+```
+
+Se aplica la transformación a todos los registros puesto que son más lo que son distintos que los que son iguales, y se verifica nuevamente.
+
+````{r}
+df$hsperc <- df$hsrank/df$hsize
+
+same_values <- length(which(df$hsperc == df$hsrank/df$hsize))
+diff_values <- length(which(df$hsperc != df$hsrank/df$hsize))
+
+
+cat("Iguales:\t", same_values, "\nDistintos:\t",diff_values)
+````
+
+
+Como resultado del proceso de normalización, aquí se presentan los tipos de cada una de las columnas que componen en dataset
+
+```{r }
+t(t(sapply(df,class)))
+```
+
+<br><br>
+
+___
+
+## 4 Valores atípicos
+
+Para verificar la existencia o no de valores atípicos, se usa un boxplot que, de manera gráfica, indica muy fácilmente la presencia aquellos valores que superan tres veces la desviación estándar.
+
+Aclaración: el enunciado plantea que los valores de sat deben estar dentro del intervalo [400-1600] que efectivamente está, por lo que se utiliza la desviación estándar como detector de _outliers_ aunque sin estar seguro si los valores dentro del intervalo son realmente excepcionales
+
+```{r }
+boxplot(df$sat, horizontal = TRUE)
+```
+
+Los estadísticos que se definen desde el boxplot son los siguientes:
+
+```{r}
+summary(df$sat)
+```
+
+
+Se guardan los registros de estos _outliers_ en la variable homónima.
+
+```{r}
+outliers = boxplot.stats(df$sat)$out
+cat("Hay un total de", length(outliers), "outliers")
+```
+
+Se asigna NA a todos los 39 outliers identificados, por lo que ahora aparecen en los datos del boxplot.
+
+```{r}
+df$sat[which(df$sat %in% outliers)] = NaN
+summary(df$sat)
+```
+
+Se realiza el mismo procedimiento para la variable _hsize_, utilizando un boxplot para detectar la presencia de outliers.
+
+```{r }
+boxplot(df$hsize, horizontal = TRUE)
+```
+
+Información del boxplot.
+
+```{r}
+summary(df$hsize)
+```
+
+Se guardan los outliers en un vector.
+
+```{r}
+outliers = boxplot.stats(df$hsize)$out
+cat("Hay un total de", length(outliers), "outliers")
+```
+
+Se le asigna _NA_ a los outliers encontrados y ahora se muestran dentro de los datos estadísticos.
+
+```{r}
+df$hsize[which(df$hsize %in% outliers)] = NaN
+summary(df$hsize)
+```
+
+<br><br>
+
+___
+
+## 5 Imputación de valores
+
+Si se da un vistazo rápido al dataset con la función _summary_, se puede observar que las columnas _sat_, _hsize_ y _colgpa_ contienen valores _NA_, 39, 169 y 41 respectivamente.
+
+```{r}
+summary(df)
+```
+
+Se identifican los valores faltantes utilizando _filter_.
+
+```{r}
+nans <- filter(df, is.na(sat) | is.na(hsize) | is.na(colgpa))
+head(nans)
+```
+
+Se aplica un _kNN_ de k=11 condicionado al género, unificando posteriormente los nuevos valores con el dataset original, y puede verse a través de _summary_ que ya no hay presencia de valores _NA_.
+
+```{r}
+df_female = kNN(dplyr::filter(df, female == TRUE), variable = c('sat', 'hsize', 'colgpa'), dist_var = c('sat', 'tothrs',  'hsize','hsrank', 'hsperc', 'colgpa'), k = 11, catFun = gowerD)
+df_not_female = kNN(dplyr::filter(df, female == FALSE), variable = c('sat', 'hsize', 'colgpa'), dist_var = c('sat', 'tothrs',  'hsize', 'hsrank', 'hsperc', 'colgpa'), k = 11, catFun = gowerD)
+df = rbind(df_female,df_not_female)
+df = within(df, rm('sat_imp', 'hsize_imp', 'colgpa_imp'))
+summary(df)
+```
+
+Se puede confirmar además aplicando un filtro que nos devuelva todos los valores _NA_ del dataset, que como puede verse en el resultado, es vacío.
+
+```{r}
+filter(df, is.na(sat) | is.na(hsize) | is.na(colgpa))
+```
+
+<br><br>
+
+___
+
+## 6 Creación de una variable
+
+Se utiliza la función _cut_, definiendo los puntos de corte ( _breaks_ ) entre los intervalos y las etiquetas que se asignan a cada uno ( _labels_ ).
+
+Referencia del código en este [link](https://r-coder.com/categorizar-variables-r/).
+
+```{r}
+gpaletter <- cut (df$colgpa, breaks=c(0, 1.49, 2.49, 3.49, 4.0), labels=c("D", "C", "B", "A") )
+
+table(gpaletter)
+```
+
+Finalmente, se añade este vector al dataset original en forma de columna utilizando _cbind_.
+
+```{r}
+df <- cbind(df, gpaletter=gpaletter)
+t(t(sapply(df,class)))
+```
+
+<br><br>
+
+___
+
+## 7 Estudio descriptivo
+
+### 7.1 Estudio descriptivo de las variables cualitativas
+
+**Primer gráfico**: Representación gráfica utilizando gplot de la variable _athlete_ en porcentajes.
+
+Referencia del código en este [link](https://www.youtube.com/watch?v=4DpktFAluCY).
+
+```{r}
+data_perc <- t(prop.table(table(df$athlete)))
+barplot(data_perc*100, col='#F7766C', xlab="Athlete", ylab="Porcentaje (%)")
+```
+
+El gráfico está relacionado con los valores que presenta la variable, como se muestra a continuación en porcentajes:
+
+```{r}
+100*table(df$athlete)/length(df$athlete)
+```
+
+**Segundo gráfico**: variable _athlete_ en función del sexo ( _female_ ) donde se muestre visualmente si el porcentaje de hombres y mujeres cambia al ser atleta o no.
+
+Se empieza por calcular los porcentajes asociados a las combinaciones en función del 100% de los casos por género.
+
+```{r}
+options(dplyr.summarise.inform = FALSE) # Evita un warning de summarize
+perc_table <- df %>% 
+  group_by(athlete, female) %>% 
+    dplyr::summarize(count = n()) %>% 
+      mutate(perc = count/sum(count))
+
+perc_table
+```
+
+Referencia de eliminación del warning de _summarize_ en el siguiente [link](https://statisticsglobe.com/dplyr-message-summarise-has-grouped-output-r).
+
+Se dibuja un gráfico de barras que representa la distribución de género según si son, o no, atletas.
+
+Referencia del código en este [link](https://stackoverflow.com/questions/24776200/ggplot-replace-count-with-percentage-in-geom-bar).
+
+```{r}
+ggplot(perc_table, aes(x = athlete, y = perc*100, fill = factor(female))) +
+  geom_bar(stat="identity", width = 0.7) +
+  labs(x = "athlete", y = "percent", fill = "female") + 
+  geom_text(data=perc_table, position = position_stack(vjust = 0.5), aes(x=athlete, y=perc*100, label = paste0(round(perc*100, digits=2),"%")), size=4)
+```
+En el gráfico anterior se puede ver que aquellos estudiantes que no son atletas, tienden a estar prácticamente igualados entre hombres y mujeres, con apenas un poco más de hombres que no lo son. Sin embargo, aquellos que sí son atletas, algo más de las 3/4 partes son hombres.
+
+### 7.2 Estudio descriptivo de las variables cuantitativas
+
+- [Referencia de medidas de centralización robustas en este](https://anestesiar.org/2014/una-familia-muy-robusta-medidas-de-centralizacion-robustas/#:~:text=Existen%20una%20serie%20de%20medidas,%2C%20185%2C%20426%20y%20435.)
+
+- [Otras medidas descriptivas usuales](https://ocw.uniovi.es/pluginfile.php/3939/mod_label/intro/1C_C6587/materia_de_clase/Tema7_EAI_teoria.pdf)
+
+- [Estadísticos y gráficos con el lenguaje R](https://www.uv.es/mperea/r_ejemplo.htm)
+
+Se crea una tabla para mostrar la información calculada. En el cálculo de las medidas, se redondean los valores a 3 dígitos decimales para facilitar su lectura en la tabla.
+
+```{r}
+tab <- matrix ( rep (NaN, times = 0 ), ncol = 4 , byrow = TRUE ) # Se define la matriz que se va a cargar con la información de las medidas
+colnames (tab) <- c (' sat ', ' tothrs ', ' hsize ', ' hsrank ')
+```
+
+- Cálculo de la **Mediana**:
+
+```{r}
+sat_median <- round(median(df$sat), digits=3)
+tothrs_median <- round(median(df$tothrs), digits=3)
+hsize_median <- round(median(df$hsize), digits=3)
+hsrank_median <- round(median(df$hsrank), digits=3)
+```
+
+- Cálculo de la **Media aritmética**:
+
+```{r}
+sat_mean <- round(mean(df$sat), digits=3)
+tothrs_mean <- round(mean(df$tothrs), digits=3)
+hsize_mean <- round(mean(df$hsize), digits=3)
+hsrank_mean <- round(mean(df$hsrank), digits=3)
+```
+
+- Cálculo de la **Media recortada al 5%**:
+
+```{r}
+sat_mean_trim_5p <- round(mean(df$sat, trim=5/100), digits=3)
+tothrs_mean_trim_5p <- round(mean(df$tothrs, trim=5/100), digits=3)
+hsize_mean_trim_5p <- round(mean(df$hsize, trim=5/100), digits=3)
+hsrank_mean_trim_5p <- round(mean(df$hsrank, trim=5/100), digits=3)
+```
+
+- Cálculo de la **Media recortada al 10%**:
+
+```{r}
+sat_mean_trim_10p <- round(mean(df$sat, trim=10/100), digits=3)
+tothrs_mean_trim_10p <- round(mean(df$tothrs, trim=10/100), digits=3)
+hsize_mean_trim_10p <- round(mean(df$hsize, trim=10/100), digits=3)
+hsrank_mean_trim_10p <- round(mean(df$hsrank, trim=10/100), digits=3)
+```
+
+- Cálculo de la **Varianza**:
+
+```{r}
+sat_variance <- round(var(df$sat), digits=3)
+tothrs_variance <- round(var(df$tothrs), digits=3)
+hsize_variance <- round(var(df$hsize), digits=3)
+hsrank_variance <- round(var(df$hsrank), digits=3)
+```
+
+- Cálculo de la **Desviación estándar**:
+
+```{r}
+sat_sd <- round(sd(df$sat), digits=3)
+tothrs_sd <- round(sd(df$tothrs), digits=3)
+hsize_sd <- round(sd(df$hsize), digits=3)
+hsrank_sd <- round(sd(df$hsrank), digits=3)
+```
+
+- Cálculo de la **Desviación media**:
+
+```{r}
+sat_dm <- round(sum(abs(df$sat-mean(df$sat)))/length(df$sat), digits=3)
+tothrs_dm <- round(sum(abs(df$tothrs-mean(df$tothrs)))/length(df$tothrs), digits=3)
+hsize_dm <- round(sum(abs(df$hsize-mean(df$hsize)))/length(df$hsize), digits=3)
+hsrank_dm <- round(sum(abs(df$hsrank-mean(df$hsrank)))/length(df$hsrank), digits=3)
+```
+
+- Cálculo del **Rango**:
+
+```{r}
+sat_range <- round(range(df$sat), digits=3)
+tothrs_range <- round(range(df$tothrs), digits=3)
+hsize_range <- round(range(df$hsize), digits=3)
+hsrank_range <- round(range(df$hsrank), digits=3)
+```
+
+Se añaden los valores a la tabla por filas según su variable
+
+```{r}
+tab <- rbind(tab, "Mediana"=c(sat_median, tothrs_median, hsize_median, hsrank_median))
+tab <- rbind(tab, "Media aritmética"=c(sat_mean, tothrs_mean, hsize_mean, hsrank_mean))
+tab <- rbind(tab, "Media recortada (5%)"=c(sat_mean_trim_5p, tothrs_mean_trim_5p, hsize_mean_trim_5p, hsrank_mean_trim_5p))
+tab <- rbind(tab, "Media recortada (10%)"=c(sat_mean_trim_10p, tothrs_mean_trim_10p, hsize_mean_trim_10p, hsrank_mean_trim_10p))
+tab <- rbind(tab, "Varianza"=c(sat_variance, tothrs_variance, hsize_variance, hsrank_variance))
+tab <- rbind(tab, "Desv. estándar"=c(sat_sd, tothrs_sd, hsize_sd, hsrank_sd))
+tab <- rbind(tab, "Desv. media"=c(sat_dm, tothrs_dm, hsize_dm, hsrank_dm))
+tab <- rbind(tab, "Rango"=c(paste(sat_range,collapse="-"), paste(tothrs_range,collapse="-"), paste(hsize_range,collapse="-"), paste(hsrank_range,collapse="-")))
+```
+
+Se presenta la tabla con los valores obtenidos.
+
+```{r}
+tab <- as.table (tab) # Se convierte de matriz a tabla
+print(tab)
+```
+
+Representación gráfica de la distribución de la variable _sat_ mediante un histograma.
+
+```{r}
+ggplot(df, aes(sat)) + 
+  geom_histogram(aes(y = ..density..), bins = 20, color = "black", fill ="#F7766C")+
+  geom_density(aes(fill = sat), alpha = 0.2)
+```
+
+Este segundo gráfico muestra la distribución de la variable _sat_ en función de _female_.
+
+Referencia del código en este [link](https://stackoverflow.com/questions/61429417/how-to-plot-multiple-distributions-with-ggplot).
+
+
+```{r}
+ggplot(df, aes(sat)) +
+  geom_histogram(aes(y = ..density..), bins = 20, color = "black", fill ="white") +
+  geom_density(aes(fill = female), alpha = 0.2) +
+  facet_wrap(~ female)
+```
+
+<br><br>
+
+___
+
+## 8 Archivo final
+
+Se exporta el fichero _csv_ con los datos procesados.
+
+```{r}
+write.csv2(df,file="gpa_clean.csv")
+```
+
+```{r}
+cat("La cantidad de registros del dataset al finalizar es de", nrow(df), " con", length(df), "columnas")
+```
+
+La estructura de columnas del dataset:
+```{r}
+t(t(sapply(df,class)))
+```
+
+<br><br>
+___
+
+## 9 Informe ejecutivo
+
+### 9.1 Tabla de resumen del preprocesamiento
+
+| #                           | Observación                                                                                                                         |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| Estado incial | Total registros: 4137, Total columnas: 10, Cualitativas: 6, Cuantitativas: 4 |
+| Normalización _athlete_ | Inicialmente es una variable de tipo _character_ (cualitativa), cuyos valores (TRUE, FALSE), presentan variaciones en mayúsculas y minúsculas. Se realiza una unificación a mayúsculas homogeneizando los valores presentes. Si bien es cierto que no presenta espacios antes o después de cada elemento, se confirma aplicando la _trim_ para quitarlos si los hubiera. Como la variable presenta además, valores binarios, se realiza su transformación a tipo _factor_.|
+| Normalización _female_ | Es otra variable de tipo _logical_ (cualitativa) y sus valores finales son de tipo TRUE/FALSE, por lo que se aplica _trim_ para eliminar los espacios en blanco presentes y se convierte la columna a tipo _factor_.|
+| Normalización _black_ | Es otra variable de tipo _character_ (cualitativa) aunque sus valores finales son de tipo TRUE/FALSE, por lo que en primer lugar se unifica todo a mayúsculas, se aplica _trim_ para eliminar los espacios en blanco presentes y se convierte la columna a tipo _factor_. |
+| Normalización _white_ | Es otra variable de tipo _character_ (cualitativa) aunque sus valores finales son de tipo TRUE/FALSE, por lo que en primer lugar se unifica todo a mayúsculas, se aplica _trim_ para eliminar los espacios en blanco presentes y se convierte la columna a tipo _factor_. Al finalizar este punto tenemos las cuatro variables cualitativas de tipo factor y de codificación unificada con valores TRUE/FALSE. |
+| Normalizaicón _sat_ | Esta variable inicialmente es de tipo numérico, todos sus valores son enteros y sólo resta verificar el rango que esté entre 400 y 1600, que efectivamente sus valores oscilan en el intervalo [470-1540] |
+| Normalización _tothrs_ | Se eliminan las unidades de horas (h) de todos los valores con al función substring y se convierte la variable a tipo numérico. |
+| Normalización _colgpa_ | La variable ya es de tipo numérico y sólo se verifica que los valores estén dentro del intervalo [0-4] |
+| Normalización _hsize_ | Inicialmente es de tipo _character_ puesto que el separador de miles es la coma, se identifican primeramente cuáles son estos registros problemáticos y finalmente se realiza el cambio del separador de coma a punto. Se transforma el tipo de la columna a numérico y se verifica que los índices anteriores ahora son correctamente numéricos. |
+| Normalización _hsperc_ | Se verifican cuántos de los valores están bien calculados y cuales no, de los cuales hay correctamente menos del 10%, por lo que se aplica el cálculo de la variable a todos los registros indistintamente de si era correcto o no. Se verifica que ya son todos correctos. A este punto se tiene que todas las columnas son del tipo que se esperaba. |
+| Identificación de valores atípicos | Se identifica la presencia de _outliers_ a través de un boxplot, cuya variable $out arroja la existencia de 39 de estos casos para la variable _sat_; estos valores son asignados con el valor _NaN_. Se realiza el mismo procedimiento con la variable _hsize_, cuya presencia de outliers asciende a 169, asignados a _NaN_.|
+| Imputación de valores | Se identifican valores faltantes en _sat_(39), _hsize_(169) y _colgpa_(41). Se verifica que realmente esos valores no están disponibles y se aplica _kNN_ con k=11 y distancia de Gower filtrando según el valor de la variable _female_. Se verifica que ya no hayan valores en _NaN_. |
+| Creación de variable _gpaletter_ | Se generan los intervalos de asignación y sus valores (de A a D), y a través de la función _cut_, se asignan las notas según el valor de la columna. Se añade la columna al dataset. |
+| Estado final | Total registros: 4137, Total columnas: 11, Cualitativas: 5, Cuantitativas: 6 |
+
+### 9.2 Resumen estadístico
+
+El resultado del preprocesado de los datos ofrece cierta información respecto de las variables que se consideran en el dataset, como por ejemplo en la variable _sat_, la media y la mediana prácticamente del mismo valor a pesar de aplicar cuatro medidas de medias distintas; en la gráfica posterior, puede verse que podría tender a una distribución normal aunque para esto habría que eventualmente aplicar ciertos tests que no son pedidos en el enunciado.
+
+Los datos presentan también un balanceo respecto a las variables _athlete_ y _female_ cuando la primera es FALSE, teniendo un desbalanceo de un 75-25 con superioridad de female=FALSE cuando _athletes_ es TRUE. Esto es importante de cara a futuro si con estos datos se fueran a entrenar modelos, puesto que hay menos con qué aprender este segundo caso y, por con apenas el 5% que lo cumplen, habría un sesgo importante en un supuesto clasificador.
+
+En función del segundo gráfico del punto 7.2, podemos decir que, aunque las distribuciones de _sat_ respecto de la variable _female_ son relativamente similares, aunque sí la media de famale=FALSE es mayor puesto que concentra mayor cantidad de casos en ese punto.
+
+En cuanto a las variables que presentan _outliers_ como _sat_, _hsize_ y _colgpa_, el número de casos asciende al 16% del total de valores presentes en el dataset, por lo que de su imputación según el _kNN_ pesa una responsabilidad de cara a la utilización de estos datos.
+
+
+
+<br><br><br><br>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
